@@ -18,14 +18,6 @@ Live-Tracker fuer Operator-Pending, Decided-Anker, Verify-Open. Status-Tags: `[P
 
 ---
 
-### D-2 UE-Projekt-Pfad  `[PENDING]`
-
-CLAUDE.md Sektion K (Permissions-Tabelle) hat `<TBD>` fuer UE-Projekt-Pfad. Sobald UE-Projekt-Repo fix ist, Operator nennt den konkreten Pfad → CLAUDE.md Update.
-
-**Aktuell beobachtet**: Operator hat UE-Projekt `MCP` unter `..\Projects\MCP\MCP\` aktiv (aus UE-Log 2026-05-13). Ist das der finale Pfad oder Throwaway-Test-Projekt?
-
----
-
 ### D-3 Inline-STOP-Konvention  `[PENDING]`
 
 In CLAUDE.md Sektion C als optional vermerkt (auskommentiert). Operator hat Ctrl+C als Default-STOP-Mechanik. Soll Inline-STOP (Claude reagiert auf "STOP/halt/warte" im Text) als zusaetzliche Soft-Variante aktiviert werden?
@@ -35,6 +27,28 @@ In CLAUDE.md Sektion C als optional vermerkt (auskommentiert). Operator hat Ctrl
 ---
 
 ## Decided
+
+### D-2 UE-Projekt-Pfad  `[DECIDED 2026-05-13]`
+
+UE-Projekt liegt unter `C:\development\Projects\MCP\` (Single-Level, `MCP.uproject` direkt drin). nDisplay-Setup, kein `Source/`-Ordner — reines Content/BP-Projekt. CLAUDE.md Sektion K Permissions-Tabelle entsprechend gefuellt.
+
+**Korrektur zur Vorbeobachtung**: alte Notiz `..\Projects\MCP\MCP\` (doppelt geschachtelt) war falsch.
+
+---
+
+### D-4 MCP-Bridge-Setup  `[DECIDED 2026-05-13]`
+
+Bridge-Architektur zur `unreal-mcp`-Anbindung:
+
+- **Plugin**: `ModelContextProtocol` (FriendlyName "Unreal MCP") in UE 5.8 Engine-Plugins, aktiv im Editor.
+- **Transport**: HTTP, Server unter `http://127.0.0.1:8000/mcp`, registriert als Server-Name `unreal-mcp`.
+- **Config-Trigger**: Editor-Console-Command `ModelContextProtocol.GenerateClientConfig ClaudeCode` schreibt `.mcp.json` ins UE-Projekt-Root.
+- **Working-Directory**: Claude-Code-Session laeuft aus `C:\development\Projects\MCP\` (UE-Projekt-Root), nicht aus Companion-Repo. Sauber getrennt: Companion-Repo = Konventionen/Memory/Tracker, UE-Projekt-Session = Editor-Drive.
+- **Coupling**: Stub-`CLAUDE.md` im UE-Projekt-Root verweist auf Companion-Repo CLAUDE.md + OPEN_DECISIONS + UE-Claude-Memory-Slug (`C--Claude_Projects-UE-claude`). Single Source of Truth bleibt das Companion-Repo.
+
+**Implikation**: Memory-Updates schreibt Claude immer in den UE-Claude-Slug, unabhaengig vom aktuellen CWD-Slug. Im Stub-CLAUDE.md dokumentiert.
+
+---
 
 ### D-0 Phase-Pivot Epic-MCP-Adopt  `[DECIDED 2026-05-13]`
 

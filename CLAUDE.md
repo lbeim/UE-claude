@@ -83,7 +83,7 @@ Material-Authoring + Workflow-Agenten via Epic-Toolsets. Operator ist Eye-Test-M
 | `C:\development\Epic Games\UE_5.8\Engine\` | ✓ | ✗ |
 | Andere Projekte/Repos | ✗ | ✗ |
 
-UE-Projekt-Pfad: `<TBD>` (siehe OPEN_DECISIONS D-2).
+UE-Projekt-Pfad: `C:\development\Projects\MCP\` (Decided 2026-05-13, siehe OPEN_DECISIONS D-2).
 
 ### Bash-Whitelist
 
