@@ -1,0 +1,3 @@
+# Debug symbols — ~58MB each (over GitHub's 50MB limit), regenerable via plugin rebuild,
+# not needed for the plugin to run or be copied 1:1.
+*.pdb
