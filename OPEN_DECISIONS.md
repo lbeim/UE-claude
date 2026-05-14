@@ -50,6 +50,28 @@ Bridge-Architektur zur `unreal-mcp`-Anbindung:
 
 ---
 
+### D-5 OSCBridge Plugin  `[DECIDED 2026-05-14]`
+
+Eigenes UE-Plugin `Plugins/OSCBridge/` im MCP-Projekt zum Empfang des React-Dashboard OSC-Streams (`C:\Privat\RBGA\ClaudeCode\react-dashboard\tools\osc_bridge.py` — WebSocket→OSC-UDP, ~60 Hz Frame-Bundles aus mod/state-Channels + Bangs).
+
+**Design-Paradigma**: Capture-First, Route-Later. Receiver erfasst jede eingehende Message in per-Address-Stats + Ring-Buffer ohne Schema-Wissen. Slate Inspector Panel (Window → Developer Tools → "OSC Inspector") visualisiert live in Editor + PIE. Routing-Layer (Path-Handler-Bindings, Wildcards) bewusst zurueckgestellt als Phase 2.
+
+**Architektur**:
+- 2 Module: `OSCBridge` (Runtime, AOSCBridgeReceiver Actor) + `OSCBridgeEditor` (Editor, SOSCInspectorPanel)
+- **Pure Actor**, KEIN Component+Wrapper-Pattern. Properties direkt am Actor-Root (Port, IP, bAutoStartInGame, bListenInEditor, RingBufferSize), `CallInEditor`-Buttons fuer Start/Stop/Clear
+- Editor-Mode-Capture: `bListenInEditor`-Flag, OnConstruction + PostEditChangeProperty Reactivity
+- PIE-Cycle: BeginPIE-Hook stoppt Editor-Receiver (Port-Konflikt), EndPIE-Hook resumed via TActorIterator
+
+**Kritisches API-Learning**: `UOSCServer::OnOscMessageReceived` (BlueprintAssignable Dynamic Multicast) dispatcht NICHT in Editor-World — nur in PIE/Game. Native-Variante `OnOscMessageReceivedNative` (DECLARE_MULTICAST_DELEGATE_ThreeParams) funktioniert in beiden Modes. Plugin nutzt deshalb Native-Delegate. Details siehe Memory [[reference-ue-osc-native-delegate-editor]].
+
+**BP+C++ Hybrid Status**: MCP.uproject bleibt BP-klassifiziert (keine `Modules:`-Section), Plugin-Module sind separat im `.uplugin`. First-Compile-Cost ~1 min einmalig, dann gecached. Identisch zur smart-core uplugin-Erfahrung.
+
+**Files**: `C:\development\Projects\MCP\Plugins\OSCBridge\` (10 Source-Files + README + .uplugin). VS Build Tools 2022 required (Operator bestaetigt installiert).
+
+**Open Phase 2 (Routing-Layer)**: Path-basierte typisierte Handler-Bindings, Wildcards `/mod/*`, optional Session Record/Replay. Aktuell BP-Side via `OnCaptured`-Event mit Address-Compare.
+
+---
+
 ### D-0 Phase-Pivot Epic-MCP-Adopt  `[DECIDED 2026-05-13]`
 
 Verschiebung von Custom-Build (`rbga-smart-core`, 3000 LoC C++ Material-Tools) zu Adoption von Epic's `Unreal MCP`-Plugin in UE 5.8 Preview.
