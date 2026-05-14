@@ -74,7 +74,12 @@ Phase 2 des OSCBridge-Plugins: typisierter Routing-Layer auf dem Capture-Foundat
 
 **Status 2026-05-14**: Code fertig + kompiliert, Operator-Eye-Test verschoben auf 2026-05-15.
 
-**Open Phase 3**: Session Record/Replay, evtl. Data-Asset-basierte Binding-Tables fuer Multi-Level-Reuse, zeit-korrektes Smoothing (DeltaTime statt per-Message) falls Bridge-Rate variabel.
+**Open Phase 3**:
+- **`Raw`-Binding-Typ** (7. Binding-Typ) — matcht Pattern, feuert `OnRaw(Tag, Address, Entry)` mit dem vollen Entry-Payload, unabhaengig davon ob andere Bindings auch matchen. Fuer Custom-Multi-Arg-Messages ohne aufwaendiges Sender-Schema. ~30 Zeilen, simpelster Binding-Typ. **Performance-Klarstellung dazu**: das Plugin fan-t NICHT aus — 1 Message = 1 `OnCaptured` = 1 `HandleReceiverCaptured`, die Args reiten im `Entry.FloatArgs`-Array. Kosten skalieren mit `(Messages/s × matchende Bindings)`, NICHT mit Arg-Count. `Raw` ist das Anti-Overload-Tool: 1 Match statt N Einzel-Bindings auf einer fetten Message.
+- **Learn-Mode-Wizard** — siehe `docs/handover-learn-mode-wizard.md` (inkl. Vorab-Frage Identifier-/Enum-Strategie).
+- Session Record/Replay.
+- Data-Asset-basierte Binding-Tables fuer Multi-Level-Reuse.
+- Zeit-korrektes Smoothing (DeltaTime statt per-Message) falls Bridge-Rate variabel.
 
 ---
 
