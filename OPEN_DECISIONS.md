@@ -50,6 +50,34 @@ Bridge-Architektur zur `unreal-mcp`-Anbindung:
 
 ---
 
+### D-6 OSCBridge Phase 2 — Routing-Layer  `[DECIDED 2026-05-14]`
+
+Phase 2 des OSCBridge-Plugins: typisierter Routing-Layer auf dem Capture-Foundation (D-5).
+
+**AOSCBridgeRouter** (Pure Actor, BP-subclassable): subscribed sich an Receiver's `OnCaptured`, haelt 6 Binding-Tabellen (Float / Vector3 / Vector4 / Bool / String / Bang), routet eingehende Messages auf Targets.
+
+**Binding-Modell**:
+- Jedes Binding: `Pattern` (FName, exact oder trailing-wildcard `/mod/*`) + `Tag` (op-Label fuers Event) + optional MPC-Target + Transform (Scale/Offset/Clamp) + Smoothing-Alpha (EMA).
+- Wildcard-Capture: `/mod/*` + ParameterName leer → captured suffix wird Param-Name → `/mod/intensity` schreibt `MPC.intensity`. Eine Zeile deckt einen ganzen Address-Prefix.
+- Bang: type-agnostic, feuert pro Message am Address, optional Cooldown gegen 60Hz-Spam.
+- Vector4 mit `bAcceptOSCColor`: OSC `r`-Type wird zu RGBA zerlegt.
+
+**Targets**: Material Parameter Collection (auto-write, kein BP-Code) UND/ODER BlueprintImplementableEvents (OnFloat/OnVector3/OnVector4/OnBool/OnString/OnBang/OnUnboundMessage) fuer BP-Subclass-Logik.
+
+**Receiver-Extension fuer Phase 2**: `OnCaptured` jetzt TwoParams (Entry + FOSCMessage). `FOSCBridgeCaptureEntry` erweitert um FloatArgs/FirstStringArg/FirstBoolArg/LinearColorArg fuer BP-Ergonomie. Hot-Path-Overhead gemessen ~0.015% Frame-Budget — Operator-Decision: behalten, keine Gate-Optimierung.
+
+**Konkrete Learnings**:
+- PIE-Duplication kopiert BlueprintAssignable-Delegate-Invocation-Lists aus der Editor-World → `AddDynamic` in BeginPlay triggert Duplicate-Ensure. Fix: defensives `RemoveDynamic` vor `AddDynamic`. Siehe [[reference-ue-pie-delegate-duplication]].
+- `FOSCBridgeAddressFilter` (Single-FName-Wrapper-Struct) war Premature-Abstraction → geflattet zu direktem `Pattern`-Feld nach Operator-Friction (Adresse landete intuitiv im ersten Textfeld = Tag).
+
+**Files**: + `OSCBridgeRouter.h/.cpp` im OSCBridge-Runtime-Modul. Build clean gegen UE 5.8.
+
+**Status 2026-05-14**: Code fertig + kompiliert, Operator-Eye-Test verschoben auf 2026-05-15.
+
+**Open Phase 3**: Session Record/Replay, evtl. Data-Asset-basierte Binding-Tables fuer Multi-Level-Reuse, zeit-korrektes Smoothing (DeltaTime statt per-Message) falls Bridge-Rate variabel.
+
+---
+
 ### D-5 OSCBridge Plugin  `[DECIDED 2026-05-14]`
 
 Eigenes UE-Plugin `Plugins/OSCBridge/` im MCP-Projekt zum Empfang des React-Dashboard OSC-Streams (`C:\Privat\RBGA\ClaudeCode\react-dashboard\tools\osc_bridge.py` — WebSocket→OSC-UDP, ~60 Hz Frame-Bundles aus mod/state-Channels + Bangs).
