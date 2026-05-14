@@ -345,7 +345,7 @@ void AOSCBridgeRouter::ApplyVector3Binding(const FOSCVector3Binding& Binding, in
 
 void AOSCBridgeRouter::ApplyVector4Binding(const FOSCVector4Binding& Binding, int32 Index, FName Address, const FOSCBridgeCaptureEntry& Entry)
 {
-	FLinearColor Value;
+	FLinearColor Value = FLinearColor::Black;
 	bool bSourced = false;
 
 	if (Binding.bAcceptOSCColor && Entry.ArgTypeSignature == TEXT("r"))

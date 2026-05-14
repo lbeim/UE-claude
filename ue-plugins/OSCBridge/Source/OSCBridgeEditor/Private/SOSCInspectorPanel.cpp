@@ -5,11 +5,11 @@
 
 #include "Widgets/Views/SHeaderRow.h"
 #include "Widgets/Views/STableRow.h"
-#include "Widgets/Layout/SBorder.h"
-#include "Widgets/Layout/SSpacer.h"
 #include "Widgets/Text/STextBlock.h"
 #include "Widgets/Input/SButton.h"
 #include "Widgets/SBoxPanel.h"
+#include "Framework/MultiBox/MultiBoxBuilder.h"
+#include "HAL/PlatformApplicationMisc.h"
 
 #define LOCTEXT_NAMESPACE "OSCBridgeEditor"
 
@@ -105,6 +105,16 @@ void SOSCInspectorPanel::Construct(const FArguments& InArgs)
 			.Padding(4, 0, 0, 0)
 			[
 				SNew(SButton)
+				.Text_Lambda([this]() { return GetPauseButtonText(); })
+				.ToolTipText(LOCTEXT("PauseTooltip", "Freeze the table so rows can be selected and copied without shifting."))
+				.OnClicked(this, &SOSCInspectorPanel::OnTogglePause)
+			]
+
+			+ SHorizontalBox::Slot()
+			.AutoWidth()
+			.Padding(4, 0, 0, 0)
+			[
+				SNew(SButton)
 				.Text(LOCTEXT("ClearStats", "Clear Stats"))
 				.OnClicked(this, &SOSCInspectorPanel::OnClearStats)
 			]
@@ -117,6 +127,7 @@ void SOSCInspectorPanel::Construct(const FArguments& InArgs)
 			SAssignNew(ListView, SListView<FStatsPtr>)
 			.ListItemsSource(&Rows)
 			.OnGenerateRow(this, &SOSCInspectorPanel::OnGenerateRow)
+			.OnContextMenuOpening(this, &SOSCInspectorPanel::OnContextMenuOpening)
 			.HeaderRow(
 				SNew(SHeaderRow)
 
@@ -163,6 +174,11 @@ TSharedRef<ITableRow> SOSCInspectorPanel::OnGenerateRow(FStatsPtr Item, const TS
 
 EActiveTimerReturnType SOSCInspectorPanel::RefreshTick(double InCurrentTime, float InDeltaTime)
 {
+	if (bPaused)
+	{
+		return EActiveTimerReturnType::Continue;
+	}
+
 	AOSCBridgeReceiver* Receiver = AOSCBridgeReceiver::GetActiveReceiver();
 
 	if (Receiver)
@@ -245,11 +261,12 @@ FText SOSCInspectorPanel::GetStatusText() const
 	}
 
 	return FText::FromString(FString::Printf(
-		TEXT("%s:%d   %s   %d addresses"),
+		TEXT("%s:%d   %s   %d addresses%s"),
 		*Receiver->ReceiveIPAddress,
 		Receiver->Port,
 		Receiver->IsListening() ? TEXT("● LISTENING") : TEXT("○ idle"),
-		Rows.Num()));
+		Rows.Num(),
+		bPaused ? TEXT("   [PAUSED]") : TEXT("")));
 }
 
 FReply SOSCInspectorPanel::OnClearStats()
@@ -264,6 +281,63 @@ FReply SOSCInspectorPanel::OnClearStats()
 		}
 	}
 	return FReply::Handled();
+}
+
+FReply SOSCInspectorPanel::OnTogglePause()
+{
+	bPaused = !bPaused;
+	return FReply::Handled();
+}
+
+FText SOSCInspectorPanel::GetPauseButtonText() const
+{
+	return bPaused ? LOCTEXT("Resume", "Resume") : LOCTEXT("Pause", "Pause");
+}
+
+TSharedPtr<SWidget> SOSCInspectorPanel::OnContextMenuOpening()
+{
+	const TArray<FStatsPtr> Selected = ListView.IsValid() ? ListView->GetSelectedItems() : TArray<FStatsPtr>();
+	if (Selected.Num() == 0 || !Selected[0].IsValid())
+	{
+		return nullptr;
+	}
+
+	FMenuBuilder MenuBuilder(/*bShouldCloseWindowAfterMenuSelection*/ true, nullptr);
+	MenuBuilder.BeginSection("OSCInspectorRow", LOCTEXT("RowActions", "OSC Channel"));
+	{
+		MenuBuilder.AddMenuEntry(
+			LOCTEXT("CopyAddress", "Copy Address"),
+			LOCTEXT("CopyAddressTooltip", "Copy the OSC address to the clipboard — paste into a Router binding Pattern field."),
+			FSlateIcon(),
+			FUIAction(FExecuteAction::CreateSP(this, &SOSCInspectorPanel::CopySelectedAddress)));
+
+		MenuBuilder.AddMenuEntry(
+			LOCTEXT("CopyLastValue", "Copy Last Value"),
+			LOCTEXT("CopyLastValueTooltip", "Copy the last received value to the clipboard."),
+			FSlateIcon(),
+			FUIAction(FExecuteAction::CreateSP(this, &SOSCInspectorPanel::CopySelectedLastValue)));
+	}
+	MenuBuilder.EndSection();
+
+	return MenuBuilder.MakeWidget();
+}
+
+void SOSCInspectorPanel::CopySelectedAddress()
+{
+	const TArray<FStatsPtr> Selected = ListView.IsValid() ? ListView->GetSelectedItems() : TArray<FStatsPtr>();
+	if (Selected.Num() > 0 && Selected[0].IsValid())
+	{
+		FPlatformApplicationMisc::ClipboardCopy(*Selected[0]->Address.ToString());
+	}
+}
+
+void SOSCInspectorPanel::CopySelectedLastValue()
+{
+	const TArray<FStatsPtr> Selected = ListView.IsValid() ? ListView->GetSelectedItems() : TArray<FStatsPtr>();
+	if (Selected.Num() > 0 && Selected[0].IsValid())
+	{
+		FPlatformApplicationMisc::ClipboardCopy(*Selected[0]->LastValueDisplay);
+	}
 }
 
 #undef LOCTEXT_NAMESPACE

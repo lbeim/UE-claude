@@ -23,6 +23,7 @@ public class OSCBridgeEditor : ModuleRules
 			"ToolMenus",
 			"WorkspaceMenuStructure",
 			"InputCore",
+			"ApplicationCore",
 			"OSC"
 		});
 	}

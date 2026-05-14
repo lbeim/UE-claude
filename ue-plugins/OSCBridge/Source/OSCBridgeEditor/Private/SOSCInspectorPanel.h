@@ -30,9 +30,16 @@ private:
 	FText GetStatusText() const;
 	FReply OnClearStats();
 
+	FReply OnTogglePause();
+	FText GetPauseButtonText() const;
+	TSharedPtr<SWidget> OnContextMenuOpening();
+	void CopySelectedAddress();
+	void CopySelectedLastValue();
+
 	TArray<FStatsPtr> Rows;
 	TSharedPtr<SListView<FStatsPtr>> ListView;
 
 	FName SortColumn = FName(TEXT("Address"));
 	EColumnSortMode::Type SortMode = EColumnSortMode::Ascending;
+	bool bPaused = false;
 };
