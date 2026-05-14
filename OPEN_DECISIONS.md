@@ -28,6 +28,22 @@ In CLAUDE.md Sektion C als optional vermerkt (auskommentiert). Operator hat Ctrl
 
 ## Decided
 
+### D-8 OSCBridge — Hz-Berechnung gefixt + Jitter-Anzeige  `[DECIDED 2026-05-14]`
+
+Operator-Befund: Hz-Spalte im Inspector zeigte wilde Ausreisser (30-2000 Hz) statt der realen ~60-Hz-Bundle-Rate. Ursache: `HzEMA` rechnete `1/Dt` pro Message (jitter-dominiert — zwei Messages 0,5 ms auseinander = 2000 Hz) und glaettete den verzerrten Kehrwert per EMA.
+
+**Fix (Operator-Decisions):**
+- **Fenster-Zaehlung statt EMA**: Rate = Messages pro Adresse im 1-s-Fenster. Stabil, unverzerrt, jitter-immun. Auch fuer seltene Bangs korrekt (EMA hatte die ueberhoeht).
+- **Berechnung Receiver → Inspector verschoben**: `HzEMA`-Feld + Per-Message-Mathe raus aus dem Hot-Path. Neuer statischer `ComputeArrivalStats()` am Receiver (pure function ueber den Capture-Ring-Buffer). Inspector ruft ihn im 10x/s-Refresh — laeuft nur solange das Panel offen ist. Operator-Wunsch: "brauche das nur im Inspector".
+- **Jitter-Spalte** (Operator-Decision "billiger Zusatz"): neue sortierbare Spalte neben Hz, zeigt Std-Abweichung der Message-Abstaende in ms — explizite Ablesung "wie sauber getaktet kommt das Signal an". Leeres Feld bei <3 Samples.
+- Debug-Overlay (`OSCBridge.Debug` CVar) nutzt denselben Helper.
+
+**Files:** geaendert: `OSCBridgeReceiver.h/.cpp`, `SOSCInspectorPanel.h/.cpp`. Build gruen gegen UE 5.8 (11 s).
+
+**Status 2026-05-14:** Code fertig + kompiliert gruen. Operator-Eye-Test offen — buendeln mit Phase-2/3-Eye-Test.
+
+---
+
 ### D-7 OSCBridge Phase 3 — Foundation + Learn-Mode-Wizard  `[DECIDED 2026-05-14]`
 
 Phase 3 in einem autonomen Overnight-Run umgesetzt (Operator-Auftrag 2026-05-14, Eye-Test gebündelt auf 2026-05-15). Alle Module kompilieren grün gegen UE 5.8 (`Build.bat`, Editor-Target).
