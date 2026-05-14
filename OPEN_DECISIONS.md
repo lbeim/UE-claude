@@ -28,6 +28,27 @@ In CLAUDE.md Sektion C als optional vermerkt (auskommentiert). Operator hat Ctrl
 
 ## Decided
 
+### D-7 OSCBridge Phase 3 — Foundation + Learn-Mode-Wizard  `[DECIDED 2026-05-14]`
+
+Phase 3 in einem autonomen Overnight-Run umgesetzt (Operator-Auftrag 2026-05-14, Eye-Test gebündelt auf 2026-05-15). Alle Module kompilieren grün gegen UE 5.8 (`Build.bat`, Editor-Target).
+
+**Foundation:**
+- **`EOSCSignalType`-Enum** (neu: `OSCBridgeTypes.h`): Float/Int/Vector3/Vector4/Bool/String/Bang/Raw — gemeinsames Typ-Vokabular für Wizard + Rechtsklick-Menü.
+- **Kanal-Identität → GameplayTag** (Operator-Decision): `Tag`-Feld an allen Binding-Structs + den `OnX`-Events von `FName` auf `FGameplayTag`. `Pattern` bleibt `FName` (Wildcard-Matching). In BP wird gegen Tag-Literale aus dem Picker verglichen statt Strings getippt. `GameplayTags`-Modul-Dep im Runtime-Modul.
+- **Int- + Raw-Binding-Typen** (Int: Operator-Decision): `FOSCIntBinding` (near-clone Float, int-getypte Transforms, kein Smoothing) + `FOSCRawBinding` (Pattern+Tag, feuert `OnRaw` mit vollem Entry-Payload, unabhängig von anderen Matches). Je TArray + Event + Apply-Pfad am Router.
+
+**Stufe 1** — Inspector-Rechtsklick "Create Binding from this signal →": Typ aus `ArgTypeSignature` der selektierten Adresse vorausgewählt, Binding an `AOSCBridgeRouter::GetActiveRouter()` angehängt, `FScopedTransaction` + `Modify()` + `PostEditChange()` für Undo/Dirty. `GetActiveRouter()` als statischer Pointer analog `GetActiveReceiver()` (gesetzt in BeginPlay/OnConstruction, geleert in EndPlay/Destroyed).
+
+**Stufe 2** — Learn-Mode-Wizard (`SOSCLearnWizard`, eigener Editor-Tab "OSC Learn Wizard" unter Developer Tools): Snapshot bei Start → neu auftauchende Adressen werden als Queue gelistet, je Zeile Typ-Combo + Tag-Name (vorausgefüllt `/mod/intensity` → `OSC.mod.intensity`) + Create-Button. Create registriert den GameplayTag via `IGameplayTagsEditorModule::AddNewGameplayTagToINI` in Tag-Source `OSCBridge.ini` (→ `Config/Tags/OSCBridge.ini`, NICHT die Projekt-Default-Ini) und legt das Binding am aktiven Router an. `GameplayTagsEditor` als Editor-Modul-Dep + `.uplugin`-Plugin-Dependency. Details: Memory [[ue-gameplaytag-registration]].
+
+**Files:** + `OSCBridgeTypes.h`, `SOSCLearnWizard.h/.cpp`; geändert: `OSCBridgeRouter.h/.cpp`, `SOSCInspectorPanel.h/.cpp`, `OSCBridgeEditorModule.cpp`, beide `Build.cs`, `OSCBridge.uplugin`.
+
+**Status 2026-05-14:** Code fertig + kompiliert grün. Operator-Eye-Test offen — gebündelt mit Phase-2-Eye-Test auf 2026-05-15.
+
+**Noch offen aus D-6:** Session Record/Replay, Data-Asset-basierte Binding-Tables, zeit-korrektes Smoothing.
+
+---
+
 ### D-2 UE-Projekt-Pfad  `[DECIDED 2026-05-13]`
 
 UE-Projekt liegt unter `C:\development\Projects\MCP\` (Single-Level, `MCP.uproject` direkt drin). nDisplay-Setup, kein `Source/`-Ordner — reines Content/BP-Projekt. CLAUDE.md Sektion K Permissions-Tabelle entsprechend gefuellt.
