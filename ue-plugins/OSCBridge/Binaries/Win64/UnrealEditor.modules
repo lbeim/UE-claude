@@ -1,0 +1,8 @@
+{
+	"BuildId": "47537391",
+	"Modules": 
+	{
+		"OSCBridge": "UnrealEditor-OSCBridge.dll",
+		"OSCBridgeEditor": "UnrealEditor-OSCBridgeEditor.dll"
+	}
+}

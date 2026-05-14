@@ -1,0 +1,8 @@
+{
+	"OutputFiles": [
+		"Module.OSCBridge.cpp.obj",
+		"OSCBridgeModule.cpp.obj",
+		"OSCBridgeReceiver.cpp.obj",
+		"OSCBridgeRouter.cpp.obj"
+	]
+}
