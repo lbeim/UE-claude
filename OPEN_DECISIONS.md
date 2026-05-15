@@ -28,6 +28,44 @@ In CLAUDE.md Sektion C als optional vermerkt (auskommentiert). Operator hat Ctrl
 
 ## Decided
 
+### D-10 OSCBridge Tag-Taxonomie + Tag-Getter + Wizard-Prefill  `[DECIDED 2026-05-15]`
+
+Operator-Decisions im Iterations-Dialog 2026-05-15.
+
+**Tag-Taxonomie — Zweck-Root.** Schema `<Zweck>.<Leaf>` (z.B. `Lighting.Brightness`, `Motion.MoveSpeed`). `OSC.`-Prefix gestrichen — wenn eh alles OSC ist, ist die Root tot. Quelle (`React`/`Companion`/…) steht am Receiver, nicht im Tag. Begruendung: matches BPs-organized-by-system, "was es tut" als primaere Navigation. Konsequenz: keine generischen Plugin-Defaults moeglich — Kategorien sind Show-spezifisch und wachsen ueber Wizard-Nutzung. Verworfen: Herkunft-Root (Picker nach Geraet), "kein Tag, nur Adresse" (kein Tippfehler-Schutz, kein Decoupling). Revidiert teilweise D-7's "OSC."-Prefix-Annahme.
+
+**Tag-Getter am Router (Pull-Pattern).** 6 BlueprintCallable Getter `GetLatest<Float/Int/Vector3/Vector4/Bool/String>(FGameplayTag Tag)` in Kategorie `OSC|Values`. Zero-Default wenn Tag noch nicht geroutet. Router cached post-transform Wert per Tag in 6 `TMap<FGameplayTag, T>`, Cache-Writes in den 6 `ApplyXBinding`-Funktionen (gating auf `Binding.Tag.IsValid()`). Drei-Spuren-Modell fuer BP-Werte-Konsum: **MPC** treibt Material direkt, **Tag-Getter** liefert Werte fuer BP-Logik (zentrale, ueberall-verfuegbare Stelle), **`OnFloat`/`OnBang`-Events** nur fuer reaktive Moment-Logik. Loest "ein OnFloat-Event fuer N Channels"-Ergonomie-Problem.
+
+**Wizard-Prefill (`SOSCLearnWizard::AddressToTagName`).** `OSC.`-Prefix raus, Segmente PascalCase, Adress-Platzhalter. `/mod/intensity` → `Mod.Intensity`. Operator benennt leading Segment auf Zweck um.
+
+**MPC-Auto-Create:** angenommen aber vertagt — braucht HOW-Decision wann/wo es einhakt (Inspector "Create Binding" hat noch keinen MPC-Target zur Anlage-Zeit; ggf. Router-Button "Auto-Create missing params for all bindings").
+
+**Files:** geaendert: `OSCBridgeRouter.h/.cpp`, `SOSCLearnWizard.cpp`. Build gruen gegen UE 5.8.
+
+**Status 2026-05-15:** Code fertig + kompiliert gruen. Operator-Eye-Test offen — gebuendelt mit D-8 und D-9.
+
+---
+
+### D-9 OSCBridge Editor-Mode-Routing — Watchdog-Fix + MPC-Propagation-Verify  `[DECIDED 2026-05-15]`
+
+Operator-Befund 2026-05-15: erster Eye-Test der D-6/D-7-Bauten ergab, dass OSC→MPC nur in PIE/Play funktionierte, nicht im Editor — trotz `bRouteInEditor`-Flag am Router.
+
+**Diagnose:** zwei Verdaechtige, einer bestaetigt, einer entlastet.
+- **C2 (bestaetigt — der Bug):** Router-Editor-Subscription-Pfad hatte keinen Retry. `OnConstruction` ruft `RebindReceiver` einmal beim Platzieren — ist der Receiver da noch nicht aktiv (Normalfall, weil `bListenInEditor` default aus ist und der Operator es spaeter umlegt), haengt der Router sich nie an. PIE-Pfad (`BeginPlay`) hat 0.5s-Retry-Timer, deshalb funktionierte's dort.
+- **C4 (entlastet — kein Engine-Bug):** Editor-World MPC-Instanz-Propagation. Gegen UE-5.8-Engine-Sources verifiziert via Verify-Subagent (`World.cpp`, `ParameterCollection.cpp`, `LevelTick.cpp`, `EditorEngine.cpp`): deferred MPC-Render-State-Updates flushen unconditional in `SendAllEndOfFrameUpdates`, das `UEditorEngine::Tick` fuer alle Worlds aufruft. Details: Memory [[reference-ue-editor-mpc-propagation]].
+
+**Fix:** Router-Editor-Subscription-Watchdog. `PrimaryActorTick.bCanEverTick = true`, `ShouldTickIfViewportsOnly() → true`, `Tick` ruft `RebindReceiver` solange `IsEditorWorld() && bRouteInEditor`. Self-healing — Router klinkt sich am aktiven Receiver an, egal in welcher Reihenfolge platziert/aktiviert. `RebindReceiver` ist idempotent (early-return wenn Subscription aktuell), per-Tick-Kosten = paar Weak-Ptr-Derefs. Play-Pfad (`BeginPlay` + Retry-Timer) unangetastet.
+
+**Realtime-Viewport-Pflicht:** Engine schreibt korrekt, aber non-realtime Level-Viewport zeichnet nicht laufend neu → User sieht's nicht. Strg+R / Viewport-Menue "Realtime" ist Pflicht fuer alles Live-im-Editor. PIE rendert immer Realtime, daher faellt's dort nicht auf.
+
+**Lesson (Memory [[feedback-static-read-isnt-runtime-verify]]):** dass der Code-Pfad existiert (`bRouteInEditor` + `OnConstruction`-Branch) heisst nicht dass er funktioniert. Static-Read von Code begruendet nur Hypothese, kein "works" — Eye-Test oder Engine-Trace gegen-checken.
+
+**Files:** geaendert: `OSCBridgeRouter.h/.cpp`. Build gruen gegen UE 5.8.
+
+**Status 2026-05-15:** Code fertig + kompiliert gruen. Operator-Eye-Test offen — gebuendelt mit D-8 und D-10.
+
+---
+
 ### D-8 OSCBridge — Hz-Berechnung gefixt + Jitter-Anzeige  `[DECIDED 2026-05-14]`
 
 Operator-Befund: Hz-Spalte im Inspector zeigte wilde Ausreisser (30-2000 Hz) statt der realen ~60-Hz-Bundle-Rate. Ursache: `HzEMA` rechnete `1/Dt` pro Message (jitter-dominiert — zwei Messages 0,5 ms auseinander = 2000 Hz) und glaettete den verzerrten Kehrwert per EMA.
