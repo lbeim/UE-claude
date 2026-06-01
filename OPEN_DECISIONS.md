@@ -43,6 +43,44 @@ Beobachtet 2026-05-16 in Editor-Logs: Receiver durchlaeuft mehrere Stop/Destroy/
 
 ## Decided
 
+### D-15 OSC Color-Curve → Live HDR Gradient (MVP prozedural MPC; Skalierung → Textur-Atlas)  `[DECIDED 2026-06-01]`
+
+Operator-Auftrag 2026-06-01: HDR-LinearColor-Farbverläufe (bis Wert 10) kommen wahlweise als fortlaufendes RGB ODER als fetter OSC-Curve-String `/col/<N>/curve <stateId>, <numPoints>, [pos, R, G, B]×N` (ein Gradient, N Stützpunkte). Sollen at-runtime UND im Editor (ohne Play) ankommen, in Niagara + Materials live nutzbar, „extremst robust".
+
+**Research (4 Subagents, gegen UE-5.8-Source verifiziert):**
+- `UCurveLinearColor`-Asset *erzeugen* = editor-only; Keys *umschreiben* = runtime-safe. ABER: **Niagara folgt einem Curve-Asset NICHT live** — die Color-Curve-DI *kopiert* die Kurve (embedded FRichCurves + LUT), Asset-Link ist WITH_EDITORONLY. Materials lesen Farbkurven nur über **Curve-Atlas (Textur), Bake = WITH_EDITOR** → zur Laufzeit nicht aktualisierbar.
+- Runtime-Textur (RenderTarget RGBA16F) wäre ein gangbarer Live-Pfad (Material+Niagara samplen dasselbe Objekt) — verworfen zugunsten prozedural (s.u.).
+- **OSC dispatcht garantiert auf dem Game-Thread** (UE 5.8: Socket-Thread → SPSC-Queue → `PumpPacketQueue` mit `check(IsInGameThread())`). MPC-/UObject-Writes im OSC-Handler sind thread-safe, kein Marshalling.
+
+**Operator-Decisions (AskUserQuestion-Serie 2026-06-01):** (a) Beides gestaffelt (Authoring + Live). (b) Ziel = **gepackte Show** → Authoring legt Assets an, Play = nur Manipulation, kein Runtime-Asset-Erzeugen. (c) Material **muss** Consumer sein (als Textur/im Shader). (d) Niagara **muss live** sein („komplett sinnfrei wenn nicht"). (e) **Smart-Weg (Operator-Idee): „Scratchpad in Niagara das wie der Shader funktioniert und die gleichen Parameter teilt".**
+
+**Gewählte Architektur — prozedural, EINE Datenquelle:**
+- OSC `/col/*/curve` → neues **`FOSCCurveBinding`** im OSCBridge-Router: parst `[stateId, numPoints, (pos,R,G,B)×N]` aus `Entry.FloatArgs`, schreibt in **eine MPC**: `GradColor0..N` (Vector, RGB in xyz, **Position in Alpha/w**) + `GradCount` (Scalar, **zuletzt** geschrieben).
+- **Material**: Custom-HLSL-Node liest die MPC-Punkte, rechnet den Verlauf **prozedural** (t = beliebiger Input — UV / World-Pos / BASS).
+- **Niagara**: liest **dieselben Werte** über eine **NPC mit `SourceMaterialCollection` = die MPC** (5.8-Bridge, live-sync MPC→NPC), ein **Scratch-Pad-Modul** rechnet identisch. **Kein Textur-Bake, kein LUT, kein Per-Component-Push, kein Runtime-Asset.** Live in Editor (Realtime-Viewport) + gepackt — **zero editor-only im Live-Pfad → cook = editor**. [[reference-ue-niagara-parameter-collection-live]]
+- NPC-Bridge-Caveats: nur Scalar+Vector bridgen (MPC hat keinen int → Count als Scalar); MPC-Vector→NPC-Color (FLinearColor, Position-in-Alpha bleibt erhalten); MPC-getriebene NPC-Params read-only (`CheckConflictWithSourceMpc`); Propagation next-frame-on-tick (Realtime-Viewport Pflicht, wie MPC).
+
+**Robustheit:** Arg-Count vs numPoints (erwartet `2+4·N`, defensiv auf Payload geclampt), Positionen sortiert (Shader braucht monotone Stops) + `[0,1]`-Clamp, NaN/Inf→0, HDR-Clamp `[0, MaxChannelValue=10]`, `GradCount` **zuletzt** (≤1 Frame Transient). Reuse bestehender `GetMPCInstance`-Guards. MaxPoints=16 (= MPC-Slot-Zahl), Position-in-Alpha (OSC liefert nur pos+RGB → 16 Vektoren statt 32 Params).
+
+**Files (additiv, kein bestehender Struct/Asset angefasst):** `OSCBridgeRouter.h` (+`FOSCCurveBinding`, +`CurveBindings`, +`OnColorCurve`-Event, +`ApplyCurveBinding`-Decl), `OSCBridgeRouter.cpp` (+Curve-Loop in `HandleReceiverCaptured`, +`ApplyCurveBinding`). **Build grün gegen UE 5.8 (7,9s, beide DLLs) 2026-06-01** — Editor-zu→Build.bat→relaunch (Live Coding scheitert bei Reflection-Change, [[reference-oscbridge-build-commands]]); via `bridge_rebuild` (D-14) künftig automatisch.
+
+**Status 2026-06-01 — MVP gebaut + via MCP authored:** C++-`FOSCCurveBinding` **kompiliert grün**. Via MCP angelegt (Operator-Assets unberührt): `/Game/OSC/MPC_OSCColorCurve` (16 `GradColor` Vector + `GradCount` Scalar — **dupliziert aus OSC_MPC + `ObjectTools.set_properties`**, da kein create-asset-of-class) + `/Game/OSC/M_OSCGradientTest` (16 CollectionParameter + Custom-HLSL-Gradient → Emissive). MCP-Authoring-Realität: [[reference-mcp-asset-creation-and-naming]]. MVP-Eye-Test optional offen (CurveBinding + Mesh + OSC).
+
+**PIVOT 2026-06-01 (Operator-Decision, AskUserQuestion „viele/wächst, Dutzende gleichzeitig"):** prozedurale MPC/NPC-Lösung skaliert NICHT auf viele Gleichzeitige (MPC-Param-Explosion + 1 Material-Variante pro Bank). **Skalierende Lösung = Gradient-Textur-Atlas** (= Operators ursprünglicher „als Textur"-Instinkt; Agent-T-verifiziert: `RenderTarget2D RTF_RGBA16f`, Runtime-Pixel-Write via `ENQUEUE_RENDER_COMMAND`+`RHIUpdateTexture2D`, Material+Niagara samplen dasselbe Objekt live, HDR):
+- **Ein `RenderTarget2D` (RGBA16F)** `W×H`: `W`=Auflösung (~256), **`H`=Zeilen=States** (~64, wächst).
+- **C++** `ApplyCurveBinding`: `/col/N/curve` → parsen+sortieren (vorhandene Logik) → auf `W` HDR-Texel resampeln → **Zeile N (=stateId)** schreiben (Render-Thread).
+- **Material**: *ein* `TextureSample(RT, (t, state/H))`, Zeile per Scalar/MID. **Niagara**: `UNiagaraDataInterfaceTexture` auf denselben RT — **GPU-Sim-only** (Emitter muss GPU sein).
+- **Self-serve** (Operator „ich muss das anlegen können"): Router-Button erzeugt/größt RT + Material-Template.
+- Prozeduraler MVP bleibt verifiziertes Single-Gradient-Stepping-Stone; Parse/Sort/Validate + Broker-Fix + MCP-Erkenntnisse 1:1 übernommen. NPC-Pfad ([[reference-ue-niagara-parameter-collection-live]]) verworfen (skaliert nicht).
+
+**Status 2026-06-01 (Fortsetzung, neue Session) — Textur-Atlas gebaut + Eye-Test GRÜN:** C++ `ApplyCurveBinding`→`OSCBridge_WriteGradientRow` (Resample Stops→W HDR-Texel, Render-Thread `RHICmdList.UpdateTexture2D` in Zeile=stateId; `RHIUpdateTexture2D` ist 5.8-deprecated) + `CreateOrResizeGradientAtlas` (CallInEditor **und** Konsolen-Cmd `OSCBridge.CreateGradientAtlas`: create+save RT via `CreatePackage`/`SavePackage`, auto-wire `/col/*`-Binding). Build.cs +`RHI`/`RenderCore`/`AssetRegistry` — **Build grün via `bridge_rebuild`**. Assets (via MCP authored): `RT_OSCGradientAtlas` (256×100 RGBA16F, vom C++-Button erzeugt — MCP kann RTs nicht create-of-class), `M_OSCGradientAtlas` (Produktion, nur Textur), `M_OSCGradientLab` (Referenz: prozedural **+** Textur via `UseTextureAtlas`-StaticSwitch, 8 Params in 4 Gruppen). Sample-Kern = `MaterialExpressionCustom`-Node `OSCGradientAtlasSample` (kopierbarer Baustein, da MCP keine MaterialFunction-Graphen baut). **Operator-Eye-Test grün 2026-06-01**: C++→RT-Zeile→Material→Mesh, HDR, live im Editor; prozeduraler Pfad zeigt sofort. API [[reference-ue-runtime-rendertarget-write]], Authoring [[reference-mcp-material-graph-authoring]], Bridge [[project-mcp-bridge-worker]].
+
+**Nächste Schritte:** (1) **Dashboard**-Fix: fortlaufende stateIds (0..N-1) für die *named* Paletten (aktuell alle stateId=1 → alle in Zeile 1; redundante numerische `/col/<id>`-Adressen raus, Row kommt aus Payload-stateId nicht aus der Adresse) → dann RT auf 256×N größen (Button) + Material-`AtlasHeight`=N (müssen synchron sein). (2) **Niagara**: `UNiagaraDataInterfaceTexture` (GPU-Emitter Pflicht, Stock-`SampleTexture`-Modul) auf denselben RT — MCP-skriptbar via `NiagaraToolsets` (diese Session registriert). (3) saubere Funktion aus `OSCGradientAtlasSample`. (4) optional `/col/*/rgb`-Einzelfarben→Voll-Zeile. MVP-MPC-Pfad (`MPC_OSCColorCurve`/`M_OSCGradientTest`) unberührt (darf retired werden).
+
+**Broker-M3-Fix (Nebenprodukt, verifiziert):** `bridge.py` forwardet jetzt `notifications/tools/list_changed` via Claude-seitigen **SSE-GET-Stream** (`do_GET`) → nach `load_toolset` erscheinen Tools transparent, **kein `/mcp`-Reconnect mehr** (Log: „claude opened SSE notification stream"). [[project-mcp-bridge-worker]]
+
+---
+
 ### D-14 MCP-Bridge-Worker — Session-Robustheit über Editor-Restart  `[DECIDED 2026-06-01]`
 
 Operator-Pain: nach jedem Editor-Rebuild/Neustart muss die MCP-Session von Hand neu verbunden (`/mcp` → `unreal-mcp`) + Toolsets neu geladen werden ([[reference-ue-editor-tick-ftickable-proxy]] Punkt 3). Operator-Auftrag 2026-06-01: robust machen „wie im Browser".
