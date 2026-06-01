@@ -14,6 +14,7 @@ Material-Authoring + Workflow-Agenten via Epic-Toolsets. Operator ist Eye-Test-M
 - **Programmatic-Pre-Flight**: vor erstem `execute_tool_script` einmal pro Session `programmatic.get_execution_environment` aufrufen, Instructions lesen.
 - **Schema-Pre-Look**: bei Multi-Tool-Scripts vorab Output-Schemas der genutzten Tools holen.
 - **Sandbox-Awareness**: erlaubte Module nur `json` / `math` / `datetime` / `copy` / `re`, `open()` read-only auf Projekt-Pfad.
+- **Native-First vor Bulk-Loops**: vor `execute_tool_script` mit Per-Actor-/Per-Asset-Loop pruefen ob AssetRegistry-API (`get_dependencies`/`get_referencers`), Reference Viewer, Asset Audit oder Console-Cmd das Ergebnis direkt liefert. Editor-Bulk-Calls = Crash-Risiko + Zeitkosten. Bei Unsicherheit Verify-Subagent statt Editor-Experiment.
 
 ## C — Operator-Beziehung
 
@@ -63,8 +64,9 @@ Material-Authoring + Workflow-Agenten via Epic-Toolsets. Operator ist Eye-Test-M
 - **Status-Tags**: `[PENDING]` / `[DECIDED YYYY-MM-DD]` / `[VERIFY-OPEN]`. Decided wird nicht geloescht sondern bleibt als Anker.
 - **Auto-Capture bei Operator-Major-Decision**: bei Architektur-/Scope-/Default-Decision schreibt Claude die als Decided-Block in OPEN_DECISIONS, ohne extra Save-Trigger.
 
-## J — Commit & Save
+## J — Build, Commit & Save
 
+- **Auto-Build nach Plugin-Source-Edits**: nach jeder Edit-Runde an `Plugins/<Plugin>/Source/**` oder UE-Projekt-`Source/**` ruft Claude eigenmaechtig (keine Op-Frage) das MCP-Tool **`bridge_rebuild`** auf — der Bridge-Worker macht save→Editor-zu→`Build.bat`→Editor-auf→reinit→Toolsets nachladen, die MCP-Session ueberlebt ([[project-mcp-bridge-worker]], OPEN_DECISIONS D-14). Fallback ohne laufenden Broker: `Build.bat` manuell mit geschlossenem Editor ([[reference-oscbridge-build-commands]]). Bei reinen Memory-/Konventions-/Doku-Edits KEIN Build.
 - **Milestone-Commit eigenmaechtig**: bei abgeschlossenen Convention-Updates / Memory-Audits / Skill-Vorlagen Commit ohne Operator-Trigger. Keine Mini-Commits pro Edit.
 - **Commit-Message [semantic]**: Kurze Zusammenfassung + Kontext-Saetze + Anchor (z.B. `CLAUDE.md Sektion D done [convention]`).
 
@@ -92,7 +94,7 @@ UE-Projekt-Pfad: `C:\development\Projects\MCP\` (Decided 2026-05-13, siehe OPEN_
 - `cm` / `plastic`: gar nicht (Operator handhabt selbst)
 - `rm` / `del` / `git reset --hard`: NIE ohne Op-OK
 - `pip install` / Package-Install: NIE
-- UnrealEditor-Launch: Operator startet selbst
+- UnrealEditor-Launch/Stop: **Worker/Claude darf selbst** (via `bridge_rebuild` bzw. `Tools\mcp-bridge\lifecycle.py`), save-dirty-first — ersetzt alte „Operator startet selbst"-Notiz ([[feedback-editor-lifecycle-permission]])
 
 ### Security-Disziplin
 

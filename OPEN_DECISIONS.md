@@ -26,7 +26,88 @@ In CLAUDE.md Sektion C als optional vermerkt (auskommentiert). Operator hat Ctrl
 
 ---
 
+### D-12 OSCBridge Receiver Editor-Mode-Cycle  `[PENDING]`
+
+Beobachtet 2026-05-16 in Editor-Logs: Receiver durchlaeuft mehrere Stop/Destroy/Start-Cycles waehrend Map-Load + nach PIE-End. Auszuege:
+- Editor-Mode beim Start: 2-3x `Started -> Destroying -> Killed -> Started` direkt hintereinander, ohne offensichtlichen Trigger. Port wechselt zwischen `0.0.0.0:0` (vermutlich CDO/Default-Konstruktion) und `0.0.0.0:8000` (echte Listener-Instanz).
+- Nach PIE-End: `Failed to bind ... SE_EADDRINUSE` direkt nach `PIE ended - resuming editor-mode OSC receiver`, dann Destroy + Start mehrfach.
+
+**Wirkt funktional nicht** (Stream funktioniert nach jedem Cycle weiter, Verifikation D-11), nur Log-Noise + potentielle Race-Bedingungen. Kandidat-Fixes:
+- Receiver-World-Type-Filter strenger (z.B. nur `EWorldType::Editor`, nicht `EditorPreview`).
+- Resume-Delay um Port-Release abzuwarten (`SE_EADDRINUSE`-Retry mit Backoff statt Sofort-Bind).
+- `OnConstruction` re-entry-Guard waehrend laufender Listen-Session.
+
+**Naechster Schritt:** wann Operator das nervt. Aktuell Side-Issue.
+
+---
+
 ## Decided
+
+### D-14 MCP-Bridge-Worker — Session-Robustheit über Editor-Restart  `[DECIDED 2026-06-01]`
+
+Operator-Pain: nach jedem Editor-Rebuild/Neustart muss die MCP-Session von Hand neu verbunden (`/mcp` → `unreal-mcp`) + Toolsets neu geladen werden ([[reference-ue-editor-tick-ftickable-proxy]] Punkt 3). Operator-Auftrag 2026-06-01: robust machen „wie im Browser".
+
+**Root-Cause (verifiziert via Explore + claude-code-guide):** Der MCP-Server lebt IM Editor-Prozess (Epic `ModelContextProtocol`-Plugin). (1) Session-ID = `FGuid::NewGuid()` pro `initialize`, rein In-Memory, nie persistiert → neuer Editor lehnt altes Token mit HTTP 400 „unknown session" ab; stabile ID im Plugin nicht vorgesehen. (2) `load_toolset`-State ist prozess-global → nach Restart weg. (3) Claude Codes Auto-Reconnect deckt nur ~30 s (5 Versuche Backoff) ab — ein Build hält den Editor Minuten unten; zusätzlich re-initialisiert Claude bei Session-Invalidierung nicht von selbst (GitHub #60949). Editor-Transport ist POST-only (GET/SSE geblockt).
+
+**Operator-Decisions (AskUserQuestion 2026-06-01):** (a) **Voller Worker** statt nur Session-Broker oder Minimal-Auto-Start. (b) „sie müssen nur speichern" = **Projekt vor Stop automatisch sichern** (dirty packages), kein Datenverlust.
+
+**Architektur:** dauerlaufender stdlib-Python-Broker (Python 3.14 via `py`-Launcher, KEIN pip — Konvention K) zwischen Claude Code und Editor. Claude → Broker `:8765/mcp` (stabile, nie-invalidierende Session) → Editor `:8000/mcp` (flüchtig). Broker hält Claudes Session am Leben, re-initialisiert die Editor-Session beim Wiederkommen, spielt geladene Toolsets verbatim nach, parkt Calls während Restart. Synthetisches Tool `bridge_rebuild` (M2) besitzt den Zyklus speichern→zu→Build.bat→auf→reinit. Ablage `C:\development\Projects\MCP\Tools\mcp-bridge\` ([[feedback-project-files-in-project]]).
+
+**Bewusster Teil-Rückbau von D-0:** dort wurde der „Worker-Coord-Daemon" gestrichen. Hier kommt ein *dünner* Worker zurück — nur Lifecycle/Robustheit, NICHT Tool-Hosting (Tools bleiben Epics Plugin).
+
+**Status 2026-06-01 — M1 + M2 verifiziert (Run-Test, kein Crash):**
+- **M1** (transparenter Reconnect-Broker) ✓: `bridge.py` stdlib-Broker auf `:8765`; stabile Claude-Session; **SSE-Streaming-Client** (`http.client`, liest tools/call-SSE bis zum Ergebnis-Event); Auto-Reconnect bei „Invalid session id"; Single-Instance-Guard. Voller Pfad Claude→Broker→Editor inkl. echtem `tools/call` gegen den Editor verifiziert.
+- **M2** (`bridge_rebuild`) ✓: save→stop→`Build.bat`→start→reinit→replay, mit **Safety-Gate** (kein Schließen wenn Save fehlschlägt). Save = `toolset_registry.toolsets.core.asset.AssetTools.save_assets({asset_paths:[]})` (alle dirty). Voller Zyklus verifiziert: **dieselbe Claude-Session überlebt den Editor-Neustart, `tools/call` ohne Reconnect**. `lifecycle.py` startet Editor mit `-StartModelContextProtocolServer` (MCP-Autostart).
+- **Crash-Lehren** (2 Editor-Crashes im Bau, beide gefixt): naiver close-early-Client crasht Editor ([[reference-ue-mcp-toolcall-sse-async-crash]]); Zombie-Broker via netstat-Locale-Bug ([[reference-windows-netstat-locale-single-instance]]).
+- **Files**: `Tools/mcp-bridge/` (bridge.py, lifecycle.py, config.json, selftest.py, test_client.py, start-bridge.cmd, README.md). `.mcp.json` → `:8765` (timeout 300000) umgestellt.
+- **M3.2 Auto-Prime** ✓: `bridge_rebuild` löst nach dem Neustart `Alt+P→ESC` via `SlateInspectorToolset.PressKey` aus (PIE-Zyklus → OSC→MPC live), best-effort + Reminder. Operator-Eye-Test 2026-06-01: „sauber funktioniert" ([[reference-ue-editor-pie-cycle-primes-mpc-stream]]).
+- **M3.3 Long-Build** ✓: Client-Timeout `.mcp.json` → 1.200.000 ms (20 min) + Worker-`build_timeout_s` 1800 s; lange Voll-Rebuilds brechen die Claude-Session nicht mehr ab. **SSE-Live-Progress-zu-Claude bewusst deferred** (Timeout gelöst, Schritte stehen im Ergebnis + Broker-Konsole; Mehrwert marginal, nachrüstbar).
+- **CLAUDE.md-Anker** ✓ (Operator-Wunsch statt OS-Autostart): Broker-Start als Bootstrap-Schritt 4 + Bridge-Status-Topologie in Projekt-`CLAUDE.md` verankert.
+- **Offen — Adoption** `[VERIFY-OPEN]`: Operator startet `start-bridge.cmd` dauerhaft + Claude einmal neu → Robustheit dauerhaft live. (Optional M4: Boot-Autostart, SSE-Live-Progress.) Operational-Doku: Memory [[project-mcp-bridge-worker]].
+
+---
+
+### D-13 Radialer Bass-Puls-Shader: Material + PulseKit-C++-Plugin  `[DECIDED 2026-06-01]`
+
+Operator-Auftrag: radiale Welle vom Center, World-Position, impulsartig + randomisiert, von BASS getriggert, X Einschuss-Punkte, Sequence/Random. Details: Memory [[project-pulsekit-radial-pulse]].
+
+**Material** `/Game/Materials/M_RadialPulse` via MCP (MaterialTools/ObjectTools/Programmatic): ein Custom-HLSL-Node als Kern, 8-Slot-Kaskade + Attack/Decay + nahtlose orientierungs-unabhängige Wobble (Normalen-Tangenten-Ebene). Authoring-Learnings: [[reference-mcp-material-graph-authoring]].
+
+**Architektur-Pivot (Operator-Decision)**: Bass-Trigger NICHT im BP (MPC-Scalar-Read im BP-Graph via MCP nicht erzeugbar — Node-Ambiguität, [[reference-mcp-bp-graph-authoring]]) und NICHT im OSCBridge-Plugin (Operator: OSC sauber halten). Stattdessen **eigenes Runtime-Plugin `Plugins/PulseKit/`** mit `UPulseTriggerComponent` (+Add-Component, Details-konfigurierbar): liest MPC-Scalar, Edge-Detect Threshold 0.65, feuert Spline-Punkte (Sequence/Random) auf die `TargetSurface`-MID. Editor-Tick via nested-FTickableGameObject-Proxy (FTSTicker scheiterte) — [[reference-ue-editor-tick-ftickable-proxy]]. **Verified 2026-06-01**: tickt im Editor (Log), treibt die Wand-MID; kompiliert grün gegen UE 5.8 (Build.bat).
+
+**Files**: + `Plugins/PulseKit/` (uplugin + 4 Source-Files, N&M-Authorship), + `/Game/Materials/M_RadialPulse` (+ `_Inst`), + `/Game/BP/BP_PulseField` (Spline + Component), Instanz in **LED_Ndisplay** auf `SM_LED_Front_merged` (Cross-Map-Save-Falle: muss in Wand-Map liegen, nicht Main).
+
+**Status 2026-06-01**: Code grün + Editor-Preview + Wand-Drive verifiziert. **Operator-Eye-Test offen** (Bass-Trigger im Play/nDisplay). `[VERIFY-OPEN]`-Feinschliff: (a) **Multi-Target** — `TargetSurface`→`TargetSurfaces` (Array) **umgebaut, Build grün 2026-06-01**: jedes Mesh eigene MID, alle synchron vom selben Puls (gleicher Center/Slot/Zeit = 1 kohärente Welle), Cache-Rebuild bei Listen-Edit (`PostEditChangeProperty`). **Pro Mesh M_RadialPulse(_Inst) auf Material-Slot 0 Pflicht**, sonst no-op. Offen: Multi-Mesh-Preview-Eye-Test + Listen-Neufüllung am platzierten BP_PulseField in LED_Ndisplay (alte Einzel-Ref durch Typwechsel weg). (b) Debug-`UE_LOG` raus **done**. (c) Default-Spline über die Wand — offen. (d) Bass-Eye-Test im Play — offen. **Build-Lesson**: Live Coding (Strg+Alt+F11) scheitert bei diesem Header/Reflection-Change (UBT Exit 6 `Unable to build while Live Coding is active` + Hot-Compile `Ensure: GC lock … game thread` beim Reflection-Rebuild) → voller Build + Editor-Restart Pflicht, [[reference-oscbridge-build-commands]].
+
+**Pivot 2026-06-01 (Operator-Decision, AskUserQuestion):** weg vom binären Threshold → **kontinuierlich kurvengetrieben**. Die `_xf`-Modulations-Kurven (von **beat core** / `rbga-engine`, Cross-Projekt) modulieren die Welle organisch (Energie/Größe/Tempo); Start `BASS_xf` (live in OSC_MPC, auch im Editor; Adresse `/mod/mod/BASS_xf`). Bereits **gebaut+grün**: Actor-Array-`TargetSurfaces`, `PulseMaterial`-Parent, `Apply`-Button, `SourceParameter`-Dropdown, Editor-Bass-Trigger. Umsetzungs-Plan freigegeben: `~/.claude/plans/atomic-watching-goose.md`. Reinkarnation für die Umsetzung. Offen: M_RadialPulse Wellen-Params (WaveSpeed/Width/Intensity) via MCP exposen + C++-MPC-Modulation; Autopulse-Altlast (MID PulseAutoFire) per MCP-Debug.
+
+---
+
+### D-11 OSCBridge Editor-Dispatch-Fix + Wizard-UX + Inspector-RC-Tag-Auto  `[DECIDED 2026-05-16]`
+
+D-8/D-9/D-10 Operator-Eye-Test 2026-05-15: trotz D-9 Watchdog kam OSC->MPC im Editor-Mode nicht durch. Logs zeigten "subscribed to ..."-Display korrekt, aber Router-OnFloat-Events fired ausschliesslich nach PIE-Start. Diagnose-Patch (CVar `OSCBridge.RouterDebug`, Tick-Heartbeat, Subscribe-Audit) am 2026-05-16 bestaetigte: **BlueprintAssignable Dynamic Multicast `OnCaptured` am Receiver dispatcht nicht in Editor-World** — gleicher Effekt wie UOSCServer's eigene Dynamic-Variante (siehe Memory [[reference-ue-osc-native-delegate-editor]] mit Generalisierung).
+
+**Editor-Dispatch-Fix:** Receiver bekommt parallelen Native-Multicast `OnCapturedNative` (`DECLARE_MULTICAST_DELEGATE_TwoParams`). `RecordMessage` broadcastet beide. Router subscribed via `FDelegateHandle` + `AddUObject` auf Native (kein `AddDynamic` mehr). BP-Subscriber koennen weiterhin am Dynamic-OnCaptured haengen. `HandleReceiverCaptured` ist nicht mehr UFUNCTION. **Verified 2026-05-16**: Operator-"funktioniert!"-Quote, Editor-MPC reagiert live ohne Play.
+
+**Inspector-Rechtsklick Tag-Auto-Create** (Op-Decision via AskUserQuestion 2026-05-16): "Create Binding from this signal" generiert jetzt einen GameplayTag aus der Adresse (gleiche `AddressToTagName`-Logik wie Wizard, dort dupliziert) und setzt ihn am Binding. Tag wird via `AddNewGameplayTagToINI` in `Config/Tags/OSCBridge.ini` registriert. Vorher nur Pattern ohne Tag — Tag-Getter im BP fand nichts.
+
+**Wizard Auto-Learn + Reset-Bug-Fix** (Op-Friction 2026-05-15/16): `bLearning`-Flag raus, Wizard pollt ab Open, alle bekannten Adressen erscheinen ohne Klick. Initial-Design hatte zwei State-Sets (Snapshot + Queue) die zu Reset-Bug fuehrten ("wenn ich den wizard resette, dann fuellt er sich nicht mehr"). Konsolidiert zu einem `KnownToWizard`-Set; PollTick filtert zusaetzlich Adressen mit exact-Match-Binding am Router aus (Wildcard-Bindings bleiben sichtbar fuer Override-Workflow). Reset clears KnownToWizard + NewSignals — naechster Tick re-fuellt mit aktuellen ungebundenen Adressen. Status-Text zeigt explizit `Receiver: X   Router: Y` (Operator-Praeferenz [[feedback-explicit-references-preferred]]).
+
+**Router-Diagnose-Patch + Snap-Button**: `bStartWithTickEnabled=true` + `SetActorTickEnabled(true)` in OnConstruction (defensive), Tick-Heartbeat-Log + Wait-Heartbeat-Log, CVar `OSCBridge.RouterDebug` fuer per-Message-Trace. Neue CallInEditor `SnapToActiveReceiver` der den expliziten Receiver-Slot fest setzt und `bAutoFindActiveReceiver` ausschaltet (Op-Praeferenz [[feedback-explicit-references-preferred]]).
+
+**6 Tag-Getter BP-Naming** (Op-Friction: "nodes sollten get OSC float etc heißen"): `GetLatestFloat/Int/Vector3/Vector4/Bool/String` haben jetzt `DisplayName="Get OSC <Type>"` + `Keywords="OSC Latest Bridge ..."` damit BP-Node-Search findet.
+
+**Konsequenz fuer D-8/D-9/D-10:** alle drei hatten Status "Operator-Eye-Test offen". Mit D-11 sind die Bauten **verifiziert grün im Editor-Mode** (D-8 Hz/Jitter, D-9 Editor-MPC via Native-Delegate, D-10 Tag-Getter im BP).
+
+**Performance-Status 2026-05-16**: Op-Check ergab Hot-Path sauber (~0.015% Frame-Budget Baseline aus D-6, plus zweiter Native-Broadcast = ein FunctionPointer-Deref pro Bind). Sub-Optimierungen (Pattern-Index-Cache, Dynamic-Broadcast-IsBound-Gate) aktuell nicht noetig.
+
+**MPC-Asset-Default-Default-Frage 2026-05-16**: Operator wollte wissen ob der Default im offenen MPC-Asset live zu sehen ist. Antwort: nein, by-design — MPC-Asset haelt Defaults (Source-of-Truth), Router schreibt nur Per-World-`UMaterialParameterCollectionInstance`-Overrides. Live-Werte sieht man im OSCBridge-Inspector, am Material-auf-Mesh, oder via `Get OSC <Type>(Tag)` im BP. Custom-Slate-Panel "OSC MPC Live-State" waere separate Feature.
+
+**Files**: geaendert `OSCBridgeReceiver.h/.cpp`, `OSCBridgeRouter.h/.cpp`, `SOSCInspectorPanel.cpp`, `SOSCLearnWizard.h/.cpp`. 3 Auto-Builds gruen gegen UE 5.8 (~8s + ~16s + ~8s).
+
+**Status 2026-05-16:** Code grün, Operator-Eye-Test grün — Editor-MPC live ohne Play, Wizard-Reset-Refresh OK, Inspector-RC-Tag-Auto built.
+
+---
 
 ### D-10 OSCBridge Tag-Taxonomie + Tag-Getter + Wizard-Prefill  `[DECIDED 2026-05-15]`
 
