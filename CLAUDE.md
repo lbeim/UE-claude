@@ -4,7 +4,7 @@ Companion-Repo zum UE-Projekt. Beheimatet Konventionen, Memory-Verweis, Skills, 
 
 ## North Star
 
-Material-Authoring + Workflow-Agenten via Epic-Toolsets. Operator ist Eye-Test-Master fuer jeden Output. Claude agiert eigenstaendig im Inkrementell-Compose-Modus — max **2-3 Tool-Operationen pro Sequenz**, dann Pause-Marker.
+Material-Authoring + Workflow-Agenten via Epic-Toolsets. Operator ist Eye-Test-Master fuer jeden Output. Claude agiert eigenstaendig im Inkrementell-Compose-Modus, **drei Loops sauber getrennt**: **Code-Loop** (Shader/Material-HLSL, Claude autonom, Einheit = *ein* selbst-verifiziertes Script) · **Graph-Loop** (Pins/Params/Rewire, gemeinsam) · **Eye-Test** (Operator, am Schluss). Das **max 2-3 Tool-Operationen pro Sequenz, dann Pause-Marker** gilt für **Graph/strukturelle/destruktive** Schritte — nicht für Code-Iteration. Detail + Pipe: B.
 
 ---
 
@@ -13,6 +13,7 @@ Material-Authoring + Workflow-Agenten via Epic-Toolsets. Operator ist Eye-Test-M
 - **Discovery on-demand**: noch nicht geladenes Toolset → `load_toolset`, dann callen. `list_toolsets` / `describe_toolset` nur bei echter Unsicherheit.
 - **Programmatic-Setup**: vor Bulk-Arbeit mit `execute_tool_script` einmal pro Session `get_execution_environment` + die genutzten Output-Schemas lesen. Sandbox: nur `json`/`math`/`datetime`/`copy`/`re`, `open()` read-only auf Projekt-Pfad.
 - **Native-First vor Bulk-Loops**: vor Per-Actor-/Per-Asset-Loops prüfen ob AssetRegistry-API, Reference Viewer oder Console-Cmd das Ergebnis direkt liefert — Editor-Bulk-Calls = Crash-/Zeitrisiko, bei Unsicherheit Verify-Subagent.
+- **Shader-/Material-Code-Loop** ([[reference-shader-code-loop-pipe]]): HLSL des Custom-Nodes lebt als **versionierte Datei** (`Shaders/*.hlsl` = Source-of-Truth, `.uasset` = Build-Artefakt), Deploy via **ein** `execute_tool_script` (Datei→`Code`→`recompile`→Reader+Log-Verify). **Einheit = das Script**, nicht 2-3 Calls; Compile-grün genügt ([[feedback-build-green-enough]]). Ownership: **Code-Loop** = Claude autonom · **Graph-Loop** (neuer Pin/Param/Rewire/Prune) = beide gemeinsam, **Reader-Readback VOR Delete** ([[reference-mcp-material-connection-read-gap]]) · **Eye-Test** = Operator. `recompile` meldet Shader-Fehler NUR im Log → ggf. frischen Translate erzwingen (Cache-Bust).
 
 ## C — Operator-Beziehung
 
@@ -78,6 +79,6 @@ Memory: `~/.claude/projects/C--Claude_Projects-UE-claude/memory/MEMORY.md` (auto
 
 ## Quick-Pointers
 
-- **Material-Authoring**: Param-Pattern statt Constants, Eye-Test pro paar Calls
+- **Material-Authoring**: Param-Pattern statt Constants; HLSL = versionierte Datei + Deploy-Pipe (Code-Loop, [[reference-shader-code-loop-pipe]]), Eye-Test am Schluss
 - **Neue Domain**: `load_toolset`, dann callen — keine Discovery-Rituale
 - **„Wir hatten das mal..."**: erst Memory + git-log durchsuchen, dann handeln
