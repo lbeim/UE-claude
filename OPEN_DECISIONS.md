@@ -12,9 +12,10 @@ Vorwärts-Backlog: **nur offene Items**. Erledigtes lebt im git log (`git log --
 
 ## Verify-Open — Code grün, Operator-Eye-Test offen
 
-- **D-13 PulseKit Radial-Puls** (`f2ef18b`) — offen: (a) BASS-Eye-Test im Play/nDisplay, (b) Multi-Mesh-Preview + `BP_PulseField`-`TargetSurfaces`-Liste in LED_Ndisplay neu füllen, (c) Default-Spline über die Wand, (d) low/mid/high + weitere Report-Kanäle anschließen ([[reference-osc-mod-channel-map]], `docs/pulsekit-channel-map.md`).
+- **D-13 PulseKit-Tuning** (`f2ef18b` + 2026-06-02-Rebuild, grün, noch nicht committed/eye-getestet) `[VERIFY-OPEN]` — Offen: (a) Effekt **viel dezenter** (Wand ~20 m, darf nicht überwältigen); (b) **Spline über die GANZE Wand** (X −650…+650, Z 100…605; aktuell links-mittig); (c) **significance scharf** (CS erzwingt noch `bAutoFirePreview=true`); (d) später Licht + Muster. Detail [[project-pulsekit-radial-pulse]]. (Shader-Teil → D-16.)
 - **D-14 Bridge-Worker Adoption** (`d5f92e6`) — `start-bridge.cmd` dauerhaft laufen lassen + Claude einmal neu → Robustheit dauerhaft live. Optional: Boot-Autostart, SSE-Live-Progress.
-- **D-15 OSC-Gradient-Atlas** (`be51989`) — §A+§B grün; offen §C: Dashboard fortlaufende stateIds + RT auf 256×N (`AtlasHeight`=N) / Niagara `DataInterfaceTexture` auf GPU-Emitter / saubere MaterialFunction aus `OSCGradientAtlasSample` / Material+Niagara-Eye-Test.
+- **D-16 Shader-Refactor + Graph-Reader** (2026-06-02, grün+gespeichert) `[VERIFY-OPEN]` — M_RadialPulse Custom-Node = 3 Outputs (Emissive/WPO/BaseColor, WPO entkoppelt), 12 tote Nodes raus (69→57); eigenes Graph-Reader-Toolset gebaut [[reference-mcp-material-connection-read-gap]]. Offen: BaseColor verdrahten · Helligkeits-Boden auf Emissive · Rotations-Regler · Param-Gruppen. Detail [[project-pulsekit-radial-pulse]], [[feedback-direct-fast-shader-iteration]]. (Color/Atlas = Operator-Domäne.)
+- **D-15 OSC-Gradient-Atlas** (`be51989` + 2026-06-02 Persistenz/Naming) `[VERIFY-OPEN]` — §A+§B grün; Modell B + self-healing Persistenz (überlebt Crash, „auto-repainted 12 rows" verifiziert) + 12 Demo-MIs benannt (`MI_Atlas_<col>_Solid|Grad`). Offen: C++-Button „Generate State Instances"; §C Niagara `DataInterfaceTexture` / MaterialFunction + Eye-Test. Detail [[reference-oscbridge-atlas-persistence]]. (C++/Renames noch nicht committed.)
 
 ## Backlog — unscheduled
 

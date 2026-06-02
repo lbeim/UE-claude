@@ -50,40 +50,17 @@ Material-Authoring + Workflow-Agenten via Epic-Toolsets. Operator ist Eye-Test-M
 
 ## J — Build, Commit & Save
 
-- **Auto-Build nach Plugin-Source-Edits**: nach Edits an `Plugins/<Plugin>/Source/**` ruft Claude eigenmächtig **`bridge_rebuild`** auf (save→Editor-zu→`Build.bat`→auf→reinit→Toolsets, MCP-Session überlebt; [[project-mcp-bridge-worker]]). **Pre-Save `save_assets([])` direkt davor** ([[feedback-bridge-rebuild-presave-assets]]), sonst hängt der Build am Save-Modal. Fallback ohne Broker: `Build.bat` manuell ([[reference-oscbridge-build-commands]]). Memory-/Konventions-/Doku-Edits → KEIN Build.
+- **Auto-Build nach Plugin-Source-Edits**: nach Edits an `Plugins/<Plugin>/Source/**` ruft Claude eigenmächtig **`bridge_rebuild`** auf (save→Editor-zu→`Build.bat`→auf→reinit→Toolsets, MCP-Session überlebt; [[project-mcp-bridge-worker]]). **Pre-Save `save_assets([])` direkt davor**, sonst hängt der Build am Save-Modal. Fallback ohne Broker: `Build.bat` manuell ([[reference-oscbridge-build-commands]]). Memory-/Konventions-/Doku-Edits → KEIN Build.
 - **Milestone-Commit eigenmächtig** bei abgeschlossenen Convention-/Memory-/Skill-Updates. Keine Mini-Commits.
 
 ## K — Permissions & Whitelist
 
-### R/W per Pfad
+Volldetail (R/W-Pfad-Tabelle, Bash-Whitelist, Security-Disziplin): **`docs/permissions.md`** — bei Permission-/Pfad-/Security-Frage dort nachschlagen. Always-on-Guardrails:
 
-| Pfad | Read | Write |
-|---|---|---|
-| `C:\Claude_Projects\UE-claude\` | ✓ | ✓ |
-| `~/.claude/projects/<UE-Claude-Slug>/memory/` | ✓ | ✓ |
-| UE-Projekt `Source/` | ✓ | Op-Pflicht-Frage |
-| UE-Projekt `Content/` (`.uasset`/`.umap`) | ✗ | ✗ NIE direkt — nur via MCP-Tools |
-| UE-Projekt `Config/` | ✓ | Op-Pflicht-Frage |
-| UE-Projekt `.plastic/` / `.git/` | ✗ | ✗ |
-| `C:\development\Epic Games\UE_5.8\Engine\` | ✓ | ✗ |
-| Andere Projekte/Repos | ✗ | ✗ |
-
-UE-Projekt-Pfad: `C:\development\Projects\MCP\` (Single-Level `MCP.uproject`, Content/BP-Projekt ohne `Source/`; **via Plastic SCM / Gluon versioniert, nicht git** — `Saved/` ist transient/ignored, durable Notizen daraus ins UE-claude-git ziehen; Decided 2026-05-13).
-
-### Bash-Whitelist
-
-- `git status / log / diff / add / commit` im UE-Claude-Repo: auto-OK
-- `git push`: Op-Pflicht-Frage (oder gar nicht falls Repo private)
-- `cm` / `plastic`: gar nicht (Operator handhabt selbst)
-- `rm` / `del` / `git reset --hard`: NIE ohne Op-OK
-- `pip install` / Package-Install: NIE
-- UnrealEditor-Launch/Stop: **Worker/Claude darf selbst** (via `bridge_rebuild` bzw. `Tools\mcp-bridge\lifecycle.py`), save-dirty-first — ersetzt alte „Operator startet selbst"-Notiz ([[feedback-editor-lifecycle-permission]])
-
-### Security-Disziplin
-
-- **Security-Changes Operator-Signoff**: Defender/Firewall/Permission/Network-Exposure/Credentials — IMMER Op-Pflicht-Frage.
-- **Security-Workaround-Flagging-Pflicht**: bei Permission-Bypass/Validation-Skip/Trust-Boundary-Erweiterung explizit flaggen (Code-Comment + Antwort-Block). Claude darf den Workaround, MUSS aber transparent machen.
-- **Cross-Project-Hygiene**: UE-Claude-Memory isoliert (eigener Slug), kein Pfad-Hardcoding zwischen Projekten, kein Auto-Edit auf andere Repos.
+- **`Content/` (`.uasset`/`.umap`) NIE direkt** — nur via MCP-Tools. `Source/`/`Config/`-Write + `git push` = Op-Pflicht-Frage. Andere Repos/Projekte, `.plastic/`, `.git/` = ✗. Engine-Headers nur Read.
+- **`rm`/`del`/`git reset --hard` NIE ohne Op-OK**; `pip install`/Package-Install NIE; `cm`/`plastic` macht der Operator selbst. UnrealEditor-Launch/Stop: Claude darf selbst, save-dirty-first ([[feedback-editor-lifecycle-permission]]).
+- **Security (Defender/Firewall/Permission/Network/Credentials) = IMMER Op-Signoff**; Permission-Bypass/Validation-Skip explizit flaggen (Code-Comment + Antwort-Block).
+- **UE-Projekt = Plastic SCM, nicht git**; `Saved/` transient → durable Notizen ins UE-claude-git. Memory isoliert (eigener Slug), kein Cross-Project-Pfad-Hardcoding.
 
 ---
 
