@@ -68,7 +68,7 @@ Material-Authoring + Workflow-Agenten via Epic-Toolsets. Operator ist Eye-Test-M
 | `C:\development\Epic Games\UE_5.8\Engine\` | ✓ | ✗ |
 | Andere Projekte/Repos | ✗ | ✗ |
 
-UE-Projekt-Pfad: `C:\development\Projects\MCP\` (Single-Level `MCP.uproject`, Content/BP-Projekt ohne `Source/`; Decided 2026-05-13).
+UE-Projekt-Pfad: `C:\development\Projects\MCP\` (Single-Level `MCP.uproject`, Content/BP-Projekt ohne `Source/`; **via Plastic SCM / Gluon versioniert, nicht git** — `Saved/` ist transient/ignored, durable Notizen daraus ins UE-claude-git ziehen; Decided 2026-05-13).
 
 ### Bash-Whitelist
 
