@@ -2,6 +2,22 @@
 
 > Lückenlose Übergabe an den Nachfolger (Reinkarnation). Self-contained → taugt auch als Respawn-Prompt. Kann nach Abarbeitung veralten — bei Widerspruch gilt OPEN_DECISIONS + Memory + Live-Editor.
 
+---
+
+## ⚡ STAND-UPDATE 2026-06-03 (NACH diesem Handover — hier ZUERST lesen, überschreibt Widersprüche unten)
+
+Mehrere „offene" §4-Punkte unten sind inzwischen ERLEDIGT/GEGENSTANDSLOS:
+
+- **§4a (Energie inert?) GEGENSTANDSLOS** — `sub_pressure` war sauber gebunden; live verifiziert (Wand läuft, OSC fliesst). Die „nicht auf dem Draht"-Notiz war veraltet.
+- **§4b (significance scharf?) ABGELÖST** — Operator hat significance+state_pulse aus Engine-Stream+Router entfernt; Trigger steht auf `phase`. MPC = jetzt exakt die 13 `07_CHANNEL_REFERENCE.md`-Kanäle, alle Bindings sauber.
+- **§4c (BrakeBias-Clamp-Drop) ERLEDIGT** (`a6fac71`).
+- **NEU: Generische Channel-Selector-Engine GEBAUT+GRÜN+VERIFIZIERT** (`a6fac71`) — **keine fixe Trigger/Energy-Logik mehr.** Alle MPC-Kanäle per **Index LIVE aus Material-Scalars** wählbar (Gruppe „0 Pulse - Engine" an `M_RadialPulse_Inst`): `TriggerChannel`/`TriggerThreshold`/`TriggerMode`(0 Rising/1 Falling/2 Level/3 Wrap) + `EnergyChannelA`/`EnergyChannelB`(−1=aus)/`EnergyOp`(+−×÷)/`EnergyScale`/`EnergyBias` → `Energie=(A op B)*Scale+Bias`. **Kein Rebuild mehr** fürs Iterieren; Config durable in Material-Defaults (Neustart-sicher). Readouts `ChannelMap`/`ActiveTrigger`/`ActiveEnergy` im Details-Panel. **Index-Tabelle:** 0 BASS·1 LOW·2 MID·3 HIGH·4 tilt_velocity·5 roughness·6 shimmer·7 spectrum_tilt·8 sub_pressure·9 phase·10 centroid_zscore·11 tension_rise·12 Warmth.
+- **EINZIGER offener PulseKit-Punkt: Operator-Eye-Test** (BrakeBias-Spreizung, Energy-Kombis, Trigger-Modi). Wahrheit: `OPEN_DECISIONS.md` D-17, Memory [[project-pulsekit-radial-pulse]], `Shaders/RadialRipples.contract.md`.
+
+Der Rest unten gilt als Kontext (v.a. der UNGEBAUTE Scope §5: LOW-Glow-Feature, BaseColor) — aber §4 ist abgehakt und §3 ist um die „0 Pulse - Engine"-Regler erweitert.
+
+---
+
 Du übernimmst eine UE-5.8-Material/Shader-Session. **Operator = Non-Coder, Eye-Test-Master.** Er tunt den Look SELBST live an der Material-Instanz, will **distinctive/parameter-abhängige** Effekte (uniform = öde, „kann jeder"), **Fortschritt > Zeremonie** (weniger Rückfragen, größere Self-Verify-Schritte, NICHT endlos verifizieren), **Versions-Stempel** in Shader-Scripts, und **High-Level-Trade-offs + Empfehlung statt Code-Snippets** in Rückfragen. Dieses Dokument ist bewusst **lückenlos**: alles Gebaute, der komplette offene Scope, und die Drifts zwischen Tracker und Live-Realität.
 
 ## 0. BOOTSTRAP (zuerst lesen)
